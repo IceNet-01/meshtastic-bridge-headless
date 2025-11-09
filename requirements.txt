@@ -1,0 +1,5 @@
+# Headless Server Dependencies
+meshtastic>=2.7.0
+pyserial>=3.5
+# Rich is used for enhanced logging output
+rich>=14.2.0

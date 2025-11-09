@@ -1,0 +1,55 @@
+[Unit]
+Description=Meshtastic Bridge - Headless Radio Repeater Service
+Documentation=https://github.com/IceNet-01/meshtastic-bridge
+After=network-online.target multi-user.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mesh
+Group=mesh
+WorkingDirectory=/home/mesh/meshtastic-bridge
+Environment="PATH=/home/mesh/meshtastic-bridge/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+# Wait for USB devices to be ready after boot
+ExecStartPre=/bin/sleep 5
+
+# Run the headless bridge with auto-detection
+ExecStart=/home/mesh/meshtastic-bridge/venv/bin/python3 /home/mesh/meshtastic-bridge/bridge.py
+
+# Auto-restart configuration
+# Always restart the service if it stops for any reason
+Restart=always
+# Wait 10 seconds before restarting after a crash
+RestartSec=10
+# Prevent restart loops - allow up to 5 restarts within 60 seconds
+StartLimitBurst=5
+StartLimitIntervalSec=60
+# If we hit the start limit, wait 2 minutes before trying again
+StartLimitAction=reboot-force
+
+# Resource limits and security
+# Restart if the service doesn't respond to watchdog pings
+WatchdogSec=30
+# Give the service 30 seconds to stop gracefully before force-killing
+TimeoutStopSec=30
+# Kill all child processes when service stops
+KillMode=control-group
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meshtastic-bridge
+
+# Security and USB access
+# Give access to USB serial devices
+SupplementaryGroups=dialout
+# Prevent privilege escalation
+NoNewPrivileges=true
+# Use a private /tmp directory
+PrivateTmp=true
+
+[Install]
+# Start automatically on boot (multi-user.target = normal boot)
+WantedBy=multi-user.target
