@@ -28,6 +28,12 @@ A reliable, always-on bridge that forwards messages between two Meshtastic radio
 - **🐛 Memory Leak Fixed**: Bounded message log prevents memory exhaustion
 - **📌 Dependency Pinning**: Version constraints prevent breaking changes from upstream
 
+### 🆕 NEW: Automatic Radio Recovery (v2.1)
+- **🔄 Individual Radio Reboot**: Automatically reboots unresponsive radios after 3 health check failures
+- **⚡ Smart Recovery**: Sends reboot command to radio, waits for restart, then reconnects
+- **🎯 Graceful System Reboot**: As last resort, system reboots gracefully (not forced) after exhausting all retries
+- **📊 Failure Tracking**: Monitors consecutive failures per radio with automatic reset on recovery
+
 **📖 See [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for detailed technical documentation of all improvements.**
 
 ## 🎯 Quick Install (2 Minutes)

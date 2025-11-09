@@ -111,6 +111,13 @@ class MeshtasticBridge:
         self.radio_settings: Dict[str, Dict[str, Any]] = {}
         self.start_time: float = time.time()
 
+        # Health check tracking for automatic radio recovery
+        self.health_failures: Dict[str, int] = {
+            'radio1': 0,
+            'radio2': 0
+        }
+        self.max_health_failures: int = 3  # Reboot radio after 3 consecutive failures
+
         # Channel configurations
         self.channel_map: Dict[str, str] = {
             'LongFast': 'LongModerate',
@@ -333,6 +340,75 @@ class MeshtasticBridge:
         """Get bridge uptime in seconds"""
         return time.time() - self.start_time
 
+    def reboot_radio(self, radio_name: str) -> bool:
+        """
+        Send reboot command to a specific radio
+
+        Args:
+            radio_name: 'radio1' or 'radio2'
+
+        Returns:
+            True if reboot command sent successfully, False otherwise
+        """
+        try:
+            interface = self.interface1 if radio_name == 'radio1' else self.interface2
+            port = self.port1 if radio_name == 'radio1' else self.port2
+
+            if not interface:
+                logger.error(f"Cannot reboot {radio_name}: no interface available")
+                return False
+
+            logger.warning(f"Sending reboot command to {radio_name} on {port}")
+
+            # Send reboot command via the Meshtastic interface
+            # The reboot() method sends a reboot request to the device
+            if hasattr(interface, 'getNode') and hasattr(interface.getNode('^local'), 'reboot'):
+                interface.getNode('^local').reboot()
+                logger.info(f"Reboot command sent to {radio_name}")
+
+                # Close the interface
+                try:
+                    interface.close()
+                except:
+                    pass
+
+                # Wait for radio to reboot
+                logger.info(f"Waiting 10 seconds for {radio_name} to reboot...")
+                time.sleep(10)
+
+                # Reconnect
+                logger.info(f"Reconnecting to {radio_name}...")
+                new_interface = self.connect_with_retry(port, radio_name, max_retries=3)
+
+                if radio_name == 'radio1':
+                    self.interface1 = new_interface
+                else:
+                    self.interface2 = new_interface
+
+                logger.info(f"{radio_name} successfully rebooted and reconnected")
+                return True
+            else:
+                logger.warning(f"Reboot method not available for {radio_name}, attempting manual reconnect")
+                # Fallback: close and reconnect
+                try:
+                    interface.close()
+                except:
+                    pass
+
+                time.sleep(5)
+                new_interface = self.connect_with_retry(port, radio_name, max_retries=3)
+
+                if radio_name == 'radio1':
+                    self.interface1 = new_interface
+                else:
+                    self.interface2 = new_interface
+
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to reboot {radio_name}: {e}")
+            return False
+
     def write_health_status(self, status_file: str = '/tmp/meshtastic-bridge-status.json') -> None:
         """
         Write health status to a JSON file for external monitoring
@@ -350,7 +426,8 @@ class MeshtasticBridge:
                 'ports': {
                     'radio1': self.port1,
                     'radio2': self.port2
-                }
+                },
+                'health_failures': self.health_failures
             }
 
             with open(status_file, 'w') as f:
@@ -363,7 +440,7 @@ class MeshtasticBridge:
     def health_check(self) -> bool:
         """
         Verify radios are still responsive
-        Attempts reconnection if health check fails
+        Automatically reboots radios after consecutive failures
 
         Returns:
             True if both radios are healthy, False otherwise
@@ -378,6 +455,8 @@ class MeshtasticBridge:
                     # Verify interface is responsive
                     if hasattr(self.interface1, 'myInfo'):
                         radio1_ok = True
+                        # Reset failure counter on success
+                        self.health_failures['radio1'] = 0
                 except Exception as e:
                     logger.warning(f"Radio 1 health check failed: {e}")
 
@@ -387,13 +466,40 @@ class MeshtasticBridge:
                     # Verify interface is responsive
                     if hasattr(self.interface2, 'myInfo'):
                         radio2_ok = True
+                        # Reset failure counter on success
+                        self.health_failures['radio2'] = 0
                 except Exception as e:
                     logger.warning(f"Radio 2 health check failed: {e}")
 
+            # Handle Radio 1 failures
+            if not radio1_ok:
+                self.health_failures['radio1'] += 1
+                logger.warning(f"Radio 1 health check failed ({self.health_failures['radio1']}/{self.max_health_failures})")
+
+                if self.health_failures['radio1'] >= self.max_health_failures:
+                    logger.error(f"Radio 1 has failed {self.max_health_failures} consecutive health checks - attempting reboot")
+                    if self.reboot_radio('radio1'):
+                        self.health_failures['radio1'] = 0  # Reset on successful reboot
+                        radio1_ok = True
+                    else:
+                        logger.error("Radio 1 reboot failed - will retry on next health check")
+
+            # Handle Radio 2 failures
+            if not radio2_ok:
+                self.health_failures['radio2'] += 1
+                logger.warning(f"Radio 2 health check failed ({self.health_failures['radio2']}/{self.max_health_failures})")
+
+                if self.health_failures['radio2'] >= self.max_health_failures:
+                    logger.error(f"Radio 2 has failed {self.max_health_failures} consecutive health checks - attempting reboot")
+                    if self.reboot_radio('radio2'):
+                        self.health_failures['radio2'] = 0  # Reset on successful reboot
+                        radio2_ok = True
+                    else:
+                        logger.error("Radio 2 reboot failed - will retry on next health check")
+
+            # Log overall health status
             if not (radio1_ok and radio2_ok):
-                logger.warning(f"Health check failed (Radio 1: {radio1_ok}, Radio 2: {radio2_ok})")
-                # Note: Full reconnection logic could be added here if needed
-                # For now, we log the issue and rely on systemd restart if it persists
+                logger.warning(f"Health check incomplete (Radio 1: {radio1_ok}, Radio 2: {radio2_ok})")
 
             return radio1_ok and radio2_ok
 

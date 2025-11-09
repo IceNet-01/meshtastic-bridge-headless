@@ -8,22 +8,83 @@ All recommendations from the code review (CODE_REVIEW.md) have been implemented,
 
 ---
 
+## 🆕 NEW Features (v2.1)
+
+### Automatic Radio Recovery System
+
+**Files:** `bridge.py`, `meshtastic-bridge.service`
+
+The system now includes intelligent radio recovery capabilities:
+
+#### Individual Radio Reboot
+- **New Method:** `reboot_radio(radio_name)`
+- Sends reboot command directly to unresponsive Meshtastic radios
+- Automatically reconnects after radio reboots
+- Fallback to manual reconnection if reboot command unavailable
+
+#### Automatic Health-Based Recovery
+- Tracks consecutive health check failures per radio
+- After **3 consecutive failures**, automatically reboots the affected radio
+- Resets failure counter on successful reboot
+- Continues monitoring and can retry if reboot fails
+
+#### Graceful System Reboot as Last Resort
+- Changed from `StartLimitAction=none` to `StartLimitAction=reboot`
+- After 5 service restart failures in 60 seconds, system reboots **gracefully** (not forced)
+- Appropriate for dedicated bridge hardware where recovery is critical
+- Gives all services time to shut down cleanly before reboot
+
+**Example Scenario:**
+```
+1. Radio 1 becomes unresponsive (health check fails)
+2. After 60s: Health check fails again (2/3 failures)
+3. After 120s: Health check fails third time (3/3 failures)
+4. Bridge automatically sends reboot command to Radio 1
+5. Radio 1 reboots and bridge reconnects
+6. Failure counter resets to 0
+7. Bridge continues normal operation
+```
+
+**Configuration:**
+```python
+self.max_health_failures = 3  # Reboot radio after 3 consecutive failures
+# Health checks run every 60 seconds
+```
+
+**Status Monitoring:**
+The health status file now includes failure tracking:
+```json
+{
+  "health_failures": {
+    "radio1": 0,
+    "radio2": 1
+  }
+}
+```
+
+---
+
 ## Critical Fixes Implemented
 
-### 1. Fixed Aggressive Reboot Policy (ISSUE 8) ✅
+### 1. System Restart Policy (ISSUE 8 - UPDATED) ✅
 
 **File:** `meshtastic-bridge.service`
 
 **Change:**
 ```ini
-# Before:
+# Version 1.0:
 StartLimitAction=reboot-force  # Would forcefully reboot system!
 
-# After:
-StartLimitAction=none  # Just stops trying, safer for production
+# Version 2.0 (initial fix):
+StartLimitAction=none  # Just stops trying
+
+# Version 2.1 (current - for dedicated hardware):
+StartLimitAction=reboot  # Graceful system reboot after all retries exhausted
 ```
 
-**Impact:** Prevents unexpected system reboots if the service fails repeatedly.
+**Rationale:** For dedicated bridge hardware, automatic system recovery is preferred over manual intervention. The graceful reboot (not forced) gives all services time to shut down cleanly.
+
+**Impact:** Maximizes uptime through automatic recovery while avoiding forced reboots that could cause data loss.
 
 ---
 

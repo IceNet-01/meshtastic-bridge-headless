@@ -28,8 +28,9 @@ RestartSec=10
 # Prevent restart loops - allow up to 5 restarts within 60 seconds
 StartLimitBurst=5
 StartLimitIntervalSec=60
-# If we hit the start limit, just stop trying (safer than rebooting)
-StartLimitAction=none
+# If we hit the start limit after 5 failed restarts, reboot the system gracefully
+# This is appropriate for dedicated bridge hardware where automatic recovery is critical
+StartLimitAction=reboot
 
 # Resource limits and security
 # Give the service 30 seconds to stop gracefully before force-killing
