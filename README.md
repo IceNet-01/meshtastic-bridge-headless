@@ -6,16 +6,29 @@ A reliable, always-on bridge that forwards messages between two Meshtastic radio
 
 ## ✨ Features
 
+### Core Functionality
 - **🚀 100% Headless Operation**: No GUI dependencies, runs as a background service
-- **⚡ Auto-Start on Boot**: Automatically starts when the system boots
-- **🔄 Auto-Restart on Crash**: Service automatically restarts if it fails
-- **🛡️ Crash Protection**: Prevents restart loops with intelligent backoff
+- **⚡ Auto-Start on Boot**: Automatically starts when the system boots with smart USB device waiting
+- **🔄 Auto-Restart on Crash**: Service automatically restarts if it fails with exponential backoff retry logic
+- **🛡️ Crash Protection**: Prevents restart loops with intelligent backoff (safer than before - no forced reboots!)
 - **🔍 Auto-Detection**: Automatically finds and connects to Meshtastic radios
 - **🔁 Bidirectional Bridge**: Forwards messages between two radios seamlessly
 - **📝 Message Deduplication**: Prevents message loops and duplicate forwarding
 - **📊 Robust Logging**: All activity logged to systemd journal
 - **⚙️ Resource Efficient**: Optimized for low-resource systems (~50-100 MB RAM)
 - **🔒 Security Hardened**: Runs with minimal privileges
+
+### NEW: Enhanced Stability & Monitoring (v2.0)
+- **🔧 Connection Retry Logic**: Exponential backoff (2s → 32s) for resilient USB connections
+- **🛑 Graceful Shutdown**: Proper signal handling (SIGTERM/SIGINT) for clean shutdowns
+- **💚 Health Monitoring**: Automatic health checks every 60s with JSON status file output
+- **📊 External Monitoring Support**: Health check script compatible with Nagios/Icinga/cron
+- **🔔 Failure Notifications**: Optional alerts via Slack/Discord/Email/Telegram/Pushover/ntfy.sh
+- **🎯 Type Hints**: Full type annotations for better code quality and IDE support
+- **🐛 Memory Leak Fixed**: Bounded message log prevents memory exhaustion
+- **📌 Dependency Pinning**: Version constraints prevent breaking changes from upstream
+
+**📖 See [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for detailed technical documentation of all improvements.**
 
 ## 🎯 Quick Install (2 Minutes)
 
@@ -242,8 +255,64 @@ Security features enabled by default:
 - No privilege escalation
 - Isolated process tree
 
+## 📊 Monitoring & Health Checks
+
+### Health Status File
+
+The bridge automatically writes health status to `/tmp/meshtastic-bridge-status.json` every 30 seconds:
+
+```bash
+# View current status
+cat /tmp/meshtastic-bridge-status.json
+
+# Monitor with jq
+watch -n 5 'jq . /tmp/meshtastic-bridge-status.json'
+```
+
+### Health Check Script
+
+Run the health check script for monitoring integration:
+
+```bash
+# Manual check
+./check-bridge-health.sh
+# Output: OK: Bridge healthy - Uptime: 1h 30m - Errors: R1=0 R2=0
+
+# Nagios/Icinga compatible (exit codes: 0=OK, 1=WARNING, 2=CRITICAL)
+./check-bridge-health.sh && echo "Healthy!" || echo "Problem detected!"
+
+# Add to cron for periodic checks
+*/5 * * * * /path/to/check-bridge-health.sh || /usr/bin/send-alert.sh
+```
+
+### Failure Notifications (Optional)
+
+Set up automatic alerts when the service fails:
+
+1. Edit `send-failure-alert.sh` to configure your notification method:
+   - Email (mail/mailx)
+   - Slack webhook
+   - Discord webhook
+   - Telegram bot
+   - Pushover
+   - ntfy.sh
+   - Custom webhooks
+
+2. Install notification service:
+   ```bash
+   sudo cp meshtastic-bridge-failure-notify@.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+3. Enable in main service file (uncomment line in `meshtastic-bridge.service`):
+   ```ini
+   OnFailure=meshtastic-bridge-failure-notify@%n.service
+   ```
+
 ## 📚 Documentation
 
+- **[IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md)** - Technical details of v2.0 improvements
+- **[CODE_REVIEW.md](CODE_REVIEW.md)** - Complete code review and security analysis
 - **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide (2 minutes to running)
 - **[INSTALL.md](INSTALL.md)** - Complete installation guide with troubleshooting
 - **README.md** - This file (overview and features)

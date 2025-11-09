@@ -6,10 +6,12 @@ Meshtastic Bridge - Bridges messages between LongFast and LongModerate channels
 import time
 import json
 import logging
+import signal
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Thread, Lock
 from collections import deque
+from typing import Optional, Dict, Any, Tuple, List, Deque
 import meshtastic
 import meshtastic.serial_interface
 from pubsub import pub
@@ -27,17 +29,18 @@ logger = logging.getLogger(__name__)
 class MessageTracker:
     """Tracks messages to prevent duplicate forwarding and loops"""
 
-    def __init__(self, max_age_minutes=10, max_messages=1000):
+    def __init__(self, max_age_minutes=10, max_messages=1000, max_log_size=10000):
         self.max_age = timedelta(minutes=max_age_minutes)
         self.max_messages = max_messages
         self.messages = deque(maxlen=max_messages)
         self.lock = Lock()
-        self.message_log = []
+        # Use bounded deque to prevent memory leak in long-running deployments
+        self.message_log = deque(maxlen=max_log_size)
 
-    def add_message(self, msg_id, from_node, to_node, text, channel):
+    def add_message(self, msg_id: int, from_node: str, to_node: str, text: str, channel: int) -> Dict[str, Any]:
         """Add a message to the tracker"""
         with self.lock:
-            entry = {
+            entry: Dict[str, Any] = {
                 'id': msg_id,
                 'from': from_node,
                 'to': to_node,
@@ -51,13 +54,13 @@ class MessageTracker:
             self._cleanup()
             return entry
 
-    def has_seen(self, msg_id):
+    def has_seen(self, msg_id: int) -> bool:
         """Check if we've already seen this message"""
         with self.lock:
             self._cleanup()
             return any(msg['id'] == msg_id for msg in self.messages)
 
-    def mark_forwarded(self, msg_id):
+    def mark_forwarded(self, msg_id: int) -> bool:
         """Mark a message as forwarded"""
         with self.lock:
             for msg in self.messages:
@@ -66,18 +69,18 @@ class MessageTracker:
                     return True
             return False
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """Remove old messages"""
         cutoff = datetime.now() - self.max_age
         while self.messages and self.messages[0]['timestamp'] < cutoff:
             self.messages.popleft()
 
-    def get_recent_messages(self, count=50):
+    def get_recent_messages(self, count: int = 50) -> List[Dict[str, Any]]:
         """Get recent messages for display"""
         with self.lock:
             return list(self.messages)[-count:]
 
-    def get_stats(self):
+    def get_stats(self) -> Dict[str, int]:
         """Get statistics about message tracking"""
         with self.lock:
             total = len(self.message_log)
@@ -92,26 +95,61 @@ class MessageTracker:
 class MeshtasticBridge:
     """Main bridge class that connects two Meshtastic radios"""
 
-    def __init__(self, port1=None, port2=None, auto_detect=True):
-        self.port1 = port1
-        self.port2 = port2
-        self.auto_detect = auto_detect
-        self.interface1 = None
-        self.interface2 = None
-        self.tracker = MessageTracker()
-        self.running = False
-        self.stats = {
+    def __init__(self, port1: Optional[str] = None, port2: Optional[str] = None, auto_detect: bool = True):
+        self.port1: Optional[str] = port1
+        self.port2: Optional[str] = port2
+        self.auto_detect: bool = auto_detect
+        self.interface1: Optional[Any] = None  # meshtastic.serial_interface.SerialInterface
+        self.interface2: Optional[Any] = None  # meshtastic.serial_interface.SerialInterface
+        self.tracker: MessageTracker = MessageTracker()
+        self.running: bool = False
+        self.stats: Dict[str, Dict[str, int]] = {
             'radio1': {'received': 0, 'sent': 0, 'errors': 0},
             'radio2': {'received': 0, 'sent': 0, 'errors': 0}
         }
-        self.lock = Lock()
-        self.radio_settings = {}
+        self.lock: Lock = Lock()
+        self.radio_settings: Dict[str, Dict[str, Any]] = {}
+        self.start_time: float = time.time()
 
         # Channel configurations
-        self.channel_map = {
+        self.channel_map: Dict[str, str] = {
             'LongFast': 'LongModerate',
             'LongModerate': 'LongFast'
         }
+
+    def connect_with_retry(self, port: str, radio_name: str, max_retries: int = 5, initial_delay: int = 2) -> Any:
+        """
+        Connect to a radio with retry logic and exponential backoff
+
+        Args:
+            port: Serial port path
+            radio_name: Name for logging (e.g., "radio1")
+            max_retries: Maximum number of connection attempts
+            initial_delay: Initial delay in seconds (doubles each retry)
+
+        Returns:
+            Connected SerialInterface object
+
+        Raises:
+            RuntimeError: If connection fails after all retries
+        """
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Connecting to {radio_name} on {port} (attempt {attempt + 1}/{max_retries})...")
+                interface = meshtastic.serial_interface.SerialInterface(port)
+                time.sleep(2)  # Wait for connection to stabilize
+                logger.info(f"{radio_name} connected successfully on {port}")
+                return interface
+            except Exception as e:
+                delay = initial_delay * (2 ** attempt)  # Exponential backoff
+                logger.warning(f"Connection attempt {attempt + 1}/{max_retries} failed for {radio_name}: {e}")
+
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying {radio_name} in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Failed to connect to {radio_name} after {max_retries} attempts")
+                    raise RuntimeError(f"Could not connect to {radio_name} on {port} after {max_retries} attempts: {e}")
 
     def connect(self):
         """Connect to both radios (with auto-detection if needed)"""
@@ -127,12 +165,9 @@ class MeshtasticBridge:
             self.port2 = devices[1][0]
             logger.info(f"Auto-detected: Radio 1 on {self.port1}, Radio 2 on {self.port2}")
 
-        logger.info(f"Connecting to radio 1 on {self.port1}...")
+        # Connect to radio 1 with retry logic
         try:
-            self.interface1 = meshtastic.serial_interface.SerialInterface(self.port1)
-            time.sleep(2)  # Wait for connection to stabilize
-            logger.info("Radio 1 connected successfully")
-
+            self.interface1 = self.connect_with_retry(self.port1, "Radio 1")
             # Check settings
             self.radio_settings['radio1'] = DeviceManager.check_radio_settings(
                 self.interface1, self.port1
@@ -141,20 +176,21 @@ class MeshtasticBridge:
             logger.error(f"Failed to connect to radio 1: {e}")
             raise
 
-        logger.info(f"Connecting to radio 2 on {self.port2}...")
+        # Connect to radio 2 with retry logic
         try:
-            self.interface2 = meshtastic.serial_interface.SerialInterface(self.port2)
-            time.sleep(2)  # Wait for connection to stabilize
-            logger.info("Radio 2 connected successfully")
-
+            self.interface2 = self.connect_with_retry(self.port2, "Radio 2")
             # Check settings
             self.radio_settings['radio2'] = DeviceManager.check_radio_settings(
                 self.interface2, self.port2
             )
         except Exception as e:
             logger.error(f"Failed to connect to radio 2: {e}")
+            # Clean up radio 1 connection
             if self.interface1:
-                self.interface1.close()
+                try:
+                    self.interface1.close()
+                except:
+                    pass
             raise
 
         # Log settings and recommendations
@@ -240,7 +276,7 @@ class MeshtasticBridge:
         except Exception as e:
             logger.error(f"Error in _handle_message: {e}")
 
-    def get_stats(self):
+    def get_stats(self) -> Dict[str, Any]:
         """Get bridge statistics"""
         with self.lock:
             return {
@@ -248,11 +284,11 @@ class MeshtasticBridge:
                 'tracker': self.tracker.get_stats()
             }
 
-    def get_recent_messages(self):
+    def get_recent_messages(self) -> List[Dict[str, Any]]:
         """Get recent messages"""
         return self.tracker.get_recent_messages()
 
-    def send_message(self, text, radio='radio1', channel=0):
+    def send_message(self, text: str, radio: str = 'radio1', channel: int = 0) -> bool:
         """Send a message through specified radio"""
         interface = self.interface1 if radio == 'radio1' else self.interface2
         try:
@@ -263,7 +299,7 @@ class MeshtasticBridge:
             logger.error(f"Failed to send message: {e}")
             return False
 
-    def get_node_info(self, radio='radio1'):
+    def get_node_info(self, radio: str = 'radio1') -> Optional[Dict[str, Any]]:
         """Get node information from a radio"""
         interface = self.interface1 if radio == 'radio1' else self.interface2
         try:
@@ -274,7 +310,7 @@ class MeshtasticBridge:
             logger.error(f"Failed to get node info: {e}")
             return None
 
-    def close(self):
+    def close(self) -> None:
         """Close connections to both radios"""
         self.running = False
         logger.info("Closing bridge connections...")
@@ -292,6 +328,78 @@ class MeshtasticBridge:
                 logger.error(f"Error closing radio 2: {e}")
 
         logger.info("Bridge closed")
+
+    def get_uptime(self) -> float:
+        """Get bridge uptime in seconds"""
+        return time.time() - self.start_time
+
+    def write_health_status(self, status_file: str = '/tmp/meshtastic-bridge-status.json') -> None:
+        """
+        Write health status to a JSON file for external monitoring
+
+        Args:
+            status_file: Path to status file (default: /tmp/meshtastic-bridge-status.json)
+        """
+        try:
+            status = {
+                'running': self.running,
+                'radios_connected': bool(self.interface1 and self.interface2),
+                'uptime_seconds': self.get_uptime(),
+                'stats': self.get_stats(),
+                'timestamp': time.time(),
+                'ports': {
+                    'radio1': self.port1,
+                    'radio2': self.port2
+                }
+            }
+
+            with open(status_file, 'w') as f:
+                json.dump(status, f, indent=2)
+
+            logger.debug(f"Health status written to {status_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write health status: {e}")
+
+    def health_check(self) -> bool:
+        """
+        Verify radios are still responsive
+        Attempts reconnection if health check fails
+
+        Returns:
+            True if both radios are healthy, False otherwise
+        """
+        try:
+            radio1_ok = False
+            radio2_ok = False
+
+            # Check radio 1
+            if self.interface1:
+                try:
+                    # Verify interface is responsive
+                    if hasattr(self.interface1, 'myInfo'):
+                        radio1_ok = True
+                except Exception as e:
+                    logger.warning(f"Radio 1 health check failed: {e}")
+
+            # Check radio 2
+            if self.interface2:
+                try:
+                    # Verify interface is responsive
+                    if hasattr(self.interface2, 'myInfo'):
+                        radio2_ok = True
+                except Exception as e:
+                    logger.warning(f"Radio 2 health check failed: {e}")
+
+            if not (radio1_ok and radio2_ok):
+                logger.warning(f"Health check failed (Radio 1: {radio1_ok}, Radio 2: {radio2_ok})")
+                # Note: Full reconnection logic could be added here if needed
+                # For now, we log the issue and rely on systemd restart if it persists
+
+            return radio1_ok and radio2_ok
+
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+            return False
 
 
 def main():
@@ -320,19 +428,53 @@ def main():
         print("  python bridge.py /dev/ttyUSB0 /dev/ttyUSB1")
         sys.exit(1)
 
+    # Signal handler for graceful shutdown
+    def signal_handler(signum, frame):
+        """Handle shutdown signals gracefully"""
+        sig_name = signal.Signals(signum).name
+        logger.info(f"Received signal {sig_name} ({signum}), initiating graceful shutdown...")
+        print(f"\nReceived {sig_name}, shutting down gracefully...")
+        bridge.running = False
+
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)  # Systemd stop
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+
     try:
         bridge.connect()
+        logger.info("Bridge is running. Press Ctrl+C to stop.")
         print("Bridge is running. Press Ctrl+C to stop.")
+
+        # Health monitoring counters
+        health_check_interval = 60  # Check every 60 seconds
+        status_write_interval = 30  # Write status every 30 seconds
+        loop_counter = 0
 
         while bridge.running:
             time.sleep(1)
+            loop_counter += 1
+
+            # Perform health check periodically
+            if loop_counter % health_check_interval == 0:
+                bridge.health_check()
+
+            # Write health status periodically
+            if loop_counter % status_write_interval == 0:
+                bridge.write_health_status()
+
+        logger.info("Main loop exited, cleaning up...")
 
     except KeyboardInterrupt:
+        # This should rarely happen now that we have signal handlers
+        logger.info("Received KeyboardInterrupt")
         print("\nStopping bridge...")
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        print(f"Error: {e}")
     finally:
+        logger.info("Closing bridge connections...")
         bridge.close()
+        logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

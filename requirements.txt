@@ -1,5 +1,8 @@
 # Headless Server Dependencies
-meshtastic>=2.7.0
-pyserial>=3.5
+# Versions pinned to prevent breaking changes while allowing patch updates
+meshtastic>=2.7.0,<3.0.0
+pyserial>=3.5,<4.0
 # Rich is used for enhanced logging output
-rich>=14.2.0
+rich>=14.2.0,<15.0.0
+# pubsub is a dependency of meshtastic but explicitly listing for clarity
+pypubsub>=4.0.3,<5.0.0
