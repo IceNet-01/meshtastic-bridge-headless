@@ -3,6 +3,8 @@ Description=Meshtastic Bridge - Headless Radio Repeater Service
 Documentation=https://github.com/IceNet-01/meshtastic-bridge
 After=network-online.target multi-user.target
 Wants=network-online.target
+# Send notification on repeated failures (optional - configure separately)
+# OnFailure=meshtastic-bridge-failure-notify@%n.service
 
 [Service]
 Type=simple
@@ -12,8 +14,8 @@ WorkingDirectory=/home/mesh/meshtastic-bridge
 Environment="PATH=/home/mesh/meshtastic-bridge/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONUNBUFFERED=1"
 
-# Wait for USB devices to be ready after boot
-ExecStartPre=/bin/sleep 5
+# Wait for USB devices to be ready after boot (smart wait with 30s timeout)
+ExecStartPre=/home/mesh/meshtastic-bridge/wait-for-usb-devices.sh 30 2
 
 # Run the headless bridge with auto-detection
 ExecStart=/home/mesh/meshtastic-bridge/venv/bin/python3 /home/mesh/meshtastic-bridge/bridge.py
@@ -26,12 +28,10 @@ RestartSec=10
 # Prevent restart loops - allow up to 5 restarts within 60 seconds
 StartLimitBurst=5
 StartLimitIntervalSec=60
-# If we hit the start limit, wait 2 minutes before trying again
-StartLimitAction=reboot-force
+# If we hit the start limit, just stop trying (safer than rebooting)
+StartLimitAction=none
 
 # Resource limits and security
-# Restart if the service doesn't respond to watchdog pings
-WatchdogSec=30
 # Give the service 30 seconds to stop gracefully before force-killing
 TimeoutStopSec=30
 # Kill all child processes when service stops

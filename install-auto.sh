@@ -58,6 +58,28 @@ else
     IS_RASPBERRY_PI=false
 fi
 
+# Check Python version early
+log_info "Checking Python version..."
+if ! command -v python3 &> /dev/null; then
+    error_exit "Python 3 is not installed. Please install Python 3.8 or higher."
+fi
+
+PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '\d+\.\d+' | head -1)
+REQUIRED_VERSION="3.8"
+
+# Compare versions (simple numeric comparison for major.minor)
+PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+REQUIRED_MAJOR=$(echo "$REQUIRED_VERSION" | cut -d. -f1)
+REQUIRED_MINOR=$(echo "$REQUIRED_VERSION" | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -lt "$REQUIRED_MAJOR" ] || \
+   ([ "$PYTHON_MAJOR" -eq "$REQUIRED_MAJOR" ] && [ "$PYTHON_MINOR" -lt "$REQUIRED_MINOR" ]); then
+    error_exit "Python $REQUIRED_VERSION or higher required, found $PYTHON_VERSION"
+fi
+
+log_success "Python version $PYTHON_VERSION meets requirements (>= $REQUIRED_VERSION)"
+
 # Get installation directory
 if [ -d "$PWD/.git" ] && [ -f "$PWD/bridge.py" ]; then
     # Already in the project directory

@@ -1,0 +1,17 @@
+[Unit]
+Description=Send notification for %i service failure
+Documentation=https://github.com/IceNet-01/meshtastic-bridge
+
+[Service]
+Type=oneshot
+# Send failure alert (customize send-failure-alert.sh for your notification method)
+ExecStart=/home/mesh/meshtastic-bridge/send-failure-alert.sh %i
+
+# Run as the same user as the main service
+User=mesh
+Group=mesh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meshtastic-bridge-alert
