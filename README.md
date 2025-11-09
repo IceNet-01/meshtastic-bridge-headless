@@ -205,18 +205,18 @@ If the service is restarting frequently:
 ┌─────────────────────────────────────────────────┐
 │         Headless Meshtastic Bridge              │
 │                                                 │
-│  ┌───────────────┐       ┌──────────────────┐  │
-│  │  Radio 1      │◄─────►│  Radio 2         │  │
-│  │  (LongFast)   │       │  (LongModerate)  │  │
-│  └───────────────┘       └──────────────────┘  │
+│  ┌───────────────┐       ┌──────────────────┐   │
+│  │  Radio 1      │◄─────►│  Radio 2         │   │
+│  │  (LongFast)   │       │  (LongModerate)  │   │
+│  └───────────────┘       └──────────────────┘   │
 │         │                         │             │
 │         │                         │             │
-│  ┌──────▼─────────────────────────▼──────────┐ │
-│  │      Message Tracker & Forwarder          │ │
-│  │  - Deduplication                          │ │
-│  │  - Bidirectional forwarding               │ │
-│  │  - Loop prevention                        │ │
-│  └───────────────────────────────────────────┘ │
+│  ┌──────▼─────────────────────────▼──────────┐  │
+│  │      Message Tracker & Forwarder          │  │
+│  │  - Deduplication                          │  │
+│  │  - Bidirectional forwarding               │  │
+│  │  - Loop prevention                        │  │
+│  └───────────────────────────────────────────┘  │
 │                      │                          │
 │                      ▼                          │
 │          ┌───────────────────────┐              │
