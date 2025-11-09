@@ -32,10 +32,10 @@ fi
 
 # Header
 clear
-echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}  ${GREEN}Meshtastic Bridge - Auto Installer${NC}         ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  Headless Server Edition                   ${BLUE}║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}  ${GREEN}Meshtastic Bridge - Auto Installer${NC}   ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  Headless Server Edition                           ${BLUE}║${NC}"
+echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 log_info "Fully automated installation - no prompts needed!"
 echo ""
@@ -204,9 +204,9 @@ log_success "Python version: $PYTHON_VERSION"
 
 # Installation complete
 echo ""
-echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}  ${GREEN}Installation Complete!${NC}                     ${BLUE}║${NC}"
-echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}  ${GREEN}Installation Complete!${NC} ${BLUE}║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 
 log_success "Meshtastic Bridge is installed and configured!"
@@ -250,8 +250,8 @@ echo ""
 # Show next steps
 if [ "$NEED_RELOGIN" = true ]; then
     echo -e "${YELLOW}╔════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║  ⚠  IMPORTANT: You must log out and back in  ║${NC}"
-    echo -e "${YELLOW}║     for USB permissions to take effect!       ║${NC}"
+    echo -e "${YELLOW}║  ⚠  IMPORTANT: You must log out and back in   ║${NC}"
+    echo -e "${YELLOW}║     for USB permissions to take effect!        ║${NC}"
     echo -e "${YELLOW}╚════════════════════════════════════════════════╝${NC}"
     echo ""
 fi
