@@ -325,7 +325,42 @@ Set up automatic alerts when the service fails:
 
 ## 🔄 Updating
 
-To update to the latest version:
+### Easy One-Command Update ⚡
+
+The easiest way to update (recommended):
+
+```bash
+cd /path/to/meshtastic-bridge-headless
+./update.sh
+```
+
+This script automatically:
+- ✅ Creates a backup of your current installation
+- ✅ Checks for and installs updates
+- ✅ Updates Python dependencies
+- ✅ Updates systemd service file if needed
+- ✅ Restarts the service
+- ✅ Provides a rollback script if anything goes wrong
+
+### Check for Updates Without Installing
+
+```bash
+./check-version.sh
+```
+
+Shows your current version and lists available updates.
+
+### Check Current Version
+
+```bash
+python3 bridge.py --version
+# or
+cat VERSION
+```
+
+### Manual Update (Advanced)
+
+If you prefer to update manually:
 
 ```bash
 cd /path/to/meshtastic-bridge-headless
@@ -333,6 +368,18 @@ git pull
 source venv/bin/activate
 pip install --upgrade -r requirements.txt
 sudo systemctl restart meshtastic-bridge
+```
+
+### Rollback to Previous Version
+
+If an update causes issues, the update script creates a rollback script in `~/.meshtastic-bridge-backups/`:
+
+```bash
+# Find your backup
+ls -la ~/.meshtastic-bridge-backups/
+
+# Run the rollback script
+~/.meshtastic-bridge-backups/backup_<version>_<timestamp>/rollback.sh
 ```
 
 ## 🗑️ Uninstallation

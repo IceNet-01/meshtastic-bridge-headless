@@ -18,6 +18,15 @@ from pubsub import pub
 
 from device_manager import DeviceManager
 
+# Version tracking
+VERSION = "2.1.0"
+try:
+    VERSION_FILE = Path(__file__).parent / "VERSION"
+    if VERSION_FILE.exists():
+        VERSION = VERSION_FILE.read_text().strip()
+except:
+    pass  # Use hardcoded version if file read fails
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -512,20 +521,33 @@ def main():
     """Main entry point for the bridge"""
     import sys
 
+    # Check for version flag
+    if len(sys.argv) == 2 and sys.argv[1] in ['--version', '-v']:
+        print(f"Meshtastic Bridge Headless Server v{VERSION}")
+        print("https://github.com/IceNet-01/meshtastic-bridge-headless")
+        sys.exit(0)
+
     # Support both auto-detection and manual port specification
     if len(sys.argv) == 3:
         # Manual mode
         port1 = sys.argv[1]
         port2 = sys.argv[2]
+        print(f"Meshtastic Bridge v{VERSION}")
         print(f"Using specified ports: {port1} and {port2}")
         bridge = MeshtasticBridge(port1, port2, auto_detect=False)
     elif len(sys.argv) == 1:
         # Auto-detection mode
+        print(f"Meshtastic Bridge v{VERSION}")
         print("Auto-detecting Meshtastic radios...")
         print("Please ensure both radios are connected via USB.")
         bridge = MeshtasticBridge(auto_detect=True)
     else:
-        print("Usage: python bridge.py [port1] [port2]")
+        print("Meshtastic Bridge Headless Server")
+        print("")
+        print("Usage: python bridge.py [options] [port1] [port2]")
+        print("")
+        print("Options:")
+        print("  --version, -v    Show version and exit")
         print("")
         print("Auto-detection mode (recommended):")
         print("  python bridge.py")
